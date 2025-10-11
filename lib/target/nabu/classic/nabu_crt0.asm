@@ -48,12 +48,16 @@ ENDIF
     EXTERN  vdp_set_mode
 ENDIF
 
-    ; Need these for switching ROM bank in and out, control bits are in an
-    ; I/O port on the sound chip of all places.
+    ; Need these for control bits to set interrupt enables and read hardware
+    ; status flags are in an I/O port on the sound chip of all places.
     PUBLIC  PSG_AY_REG
     PUBLIC  PSG_AY_DATA
     defc    PSG_AY_REG = $40
     defc    PSG_AY_DATA = $41
+
+    defc    IO_CONTROL = $0 ; I/O address of the control register.
+    defc    CONTROL_ROMSEL = $01 ; Bit which controls ROM enable.
+    defc    CONTROL_VDOBUF = $02 ; Bit which controls video output choice.
 
     ; We don't include atexit() functionality, so don't save space for them.
     defc    TAR__clib_exit_stack_size = 0
@@ -75,10 +79,19 @@ ENDIF
     ; from one ROM version to another!  The most common ROM loads at $140d.
     ; So our code here needs to be position independent.
 relocate:
-; get PC
+    ; Switch out boot ROM so RAM is visible, connect VDP to video output.
+    ld  a, CONTROL_ROMSEL | CONTROL_VDOBUF
+    out (IO_CONTROL), a
+    ; Write a POP HL followed by JP (HL) instruction to location 0, 1.
+    ld  ($0000), $E1
+    ld  ($0001), $E9
+    call $0000  ; Results in program counter in register HL.
+
+; get PC  bleeble
 ; source pionter is PC - a bit.
 ; dest pointer is origin
 ; size is ?
+ ; ldir : copy from (hl) to (de), hl++, de++, decrement bc, stop when zero.
 
 start:
 IF !__NABU_BARE__
