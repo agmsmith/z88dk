@@ -32,9 +32,6 @@ IF __NABU_BARE__
     ; "Bare" subtype, no stdio etc.  Assumes you are using DJ Sures' NABU_LIB
     ; (see https://nabu.ca/) which is a hardware library included as source
     ; code that does everything from VDP print support to interrupt handling.
-;    defc    TAR__fputc_cons_generic = 0 ; So our fputc_cons_native gets used.
-;    defc    TAR__fgetc_cons_inkey = 0
-;    defc    TAR__no_ansifont = 1
 ELSE
     ; Subtype "Default" has console output and input.
     defc    TAR__fputc_cons_generic = 1
@@ -58,7 +55,7 @@ ENDIF
     defc    PSG_AY_REG = $40
     defc    PSG_AY_DATA = $41
 
-    ; We don't use atexit() functionality, so don't save space for them.
+    ; We don't include atexit() functionality, so don't save space for them.
     defc    TAR__clib_exit_stack_size = 0
 
     ; Put the stack below $ff00, interrupt table will be at $ff00 and above. 
@@ -72,8 +69,17 @@ ENDIF
     ; them, so put in 0 = NOP.  May have been used for a 24 bit size of the
     ; segment or something else NABU Networky.
     defb    0,0,0
-    jr      start
-    defq    __CPU_CLOCK ; TODO: Remove.  Just testing defines from nabu.cfg.
+
+    ; Relocate the loaded program and data to the actual origin location, since
+    ; the NABU ROMs load the segment somewhere after the ROMs, and it varies
+    ; from one ROM version to another!  The most common ROM loads at $140d.
+    ; So our code here needs to be position independent.
+relocate:
+; get PC
+; source pionter is PC - a bit.
+; dest pointer is origin
+; size is ?
+
 start:
 IF !__NABU_BARE__
     ; Save stack pointer by modifying code, so it gets restored on exit.
@@ -95,13 +101,12 @@ IF !__NABU_BARE__
     call    cpm_platform_init 
 ENDIF
 
-    INCLUDE "crt/classic/crt_init_atexit.inc"
 IF !__NABU_BARE__
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_init.inc"
 ENDIF
     INCLUDE "crt/classic/crt_init_heap.inc"
 
-    ; Turn on or off interrupts.
+    ; Turn on or off interrupts as specified by another define.
     INCLUDE "crt/classic/crt_init_eidi.inc"
 
     call    _main
