@@ -28,7 +28,7 @@ ENDIF
     ; doesn't start at location 0.
     defc    TAR__crt_enable_rst = 0
 
-IF __NABU_BARE__
+IF NABU_BARE_ASM
     ; "Bare" subtype, no stdio etc.  Assumes you are using DJ Sures' NABU_LIB
     ; (see https://nabu.ca/) which is a hardware library included as source
     ; code that does everything from VDP print support to interrupt handling.
@@ -46,18 +46,7 @@ IFNDEF CLIB_DEFAULT_SCREEN_MODE
 ENDIF
     EXTERN  cpm_platform_init
     EXTERN  vdp_set_mode
-ENDIF
-
-    ; Need these for control bits to set interrupt enables and read hardware
-    ; status flags are in an I/O port on the sound chip of all places.
-    PUBLIC  PSG_AY_REG
-    PUBLIC  PSG_AY_DATA
-    defc    PSG_AY_REG = $40
-    defc    PSG_AY_DATA = $41
-
-    defc    IO_CONTROL = $0 ; I/O address of the control register.
-    defc    CONTROL_ROMSEL = $01 ; Bit which controls ROM enable.
-    defc    CONTROL_VDOBUF = $02 ; Bit which controls video output choice.
+ENDIF ; NABU_BARE_ASM
 
     ; We don't include atexit() functionality, so don't save space for them.
     defc    TAR__clib_exit_stack_size = 0
@@ -74,27 +63,58 @@ ENDIF
     ; segment or something else NABU Networky.
     defb    0,0,0
 
+IF NABU_BARE_ASM
     ; Relocate the loaded program and data to the actual origin location, since
     ; the NABU ROMs load the segment somewhere after the ROMs, and it varies
     ; from one ROM version to another!  The most common ROM loads at $140d.
-    ; So our code here needs to be position independent.
-relocate:
+    ; So our code here needs to be position independent.  It works by writing
+    ; some code to near the end of RAM ($FFE0) to get the program counter, and
+    ; do an ldir to move the program.
+
+    defc    IO_CONTROL = $0 ; I/O address of the control register.
+    defc    CONTROL_ROMSEL = $01 ; Bit which controls ROM enable.
+    defc    CONTROL_VDOBUF = $02 ; Bit which controls video output choice.
+    defc    NABU_BARE_STUB_DESTINATION = $FFE0
+    EXTERN  __RODATA_END_tail
+
+nabu_bare_relocate:
     ; Switch out boot ROM so RAM is visible, connect VDP to video output.
     ld  a, CONTROL_ROMSEL | CONTROL_VDOBUF
     out (IO_CONTROL), a
-    ; Write a POP HL followed by JP (HL) instruction to location 0, 1.
-    ld  ($0000), $E1
-    ld  ($0001), $E9
-    call $0000  ; Results in program counter in register HL.
 
-; get PC  bleeble
-; source pionter is PC - a bit.
-; dest pointer is origin
-; size is ?
- ; ldir : copy from (hl) to (de), hl++, de++, decrement bc, stop when zero.
+    ; Write a little program stub into RAM at known memory addresses, which
+    ; hopefully won't be overwritten by our program when it gets loaded into
+    ; RAM at a higher address (up to 8K higher) than we expected.
+    ld  hl, nabu_bare_stub_start
+    ld  de, NABU_BARE_STUB_DESTINATION
+    ld  bc, nabu_bare_stub_end-nabu_bare_stub_start
+    ldir
+
+    ; Get address of nabu_bare_pc: as loaded somewhere in memory into HL.
+    call NABU_BARE_STUB_DESTINATION+nabu_bare_stub_get_pc-nabu_bare_stub_start
+nabu_bare_pc:
+
+    ; Set up the registers for an ldir to move the program down in memory.
+    ; Doesn't work for moving it up in memory.
+    ld   bc, nabu_bare_pc-CRT_ORG_CODE
+    and  a, a ; Clear the carry flag.
+    sbc  hl, bc ; HL set to address of loaded start of this program.
+    ld   de, CRT_ORG_CODE ; Desired beginning of program in RAM.
+    ld   bc, __RODATA_END_tail-CRT_ORG_CODE ; Size of this program in bytes.
+    jp   NABU_BARE_STUB_DESTINATION+nabu_bare_stub_ldir-nabu_bare_stub_start
+
+nabu_bare_stub_start:
+nabu_bare_stub_get_pc:
+    pop hl
+    jp  (hl)
+nabu_bare_stub_ldir:
+    ldir
+    jp  start ; Continue on with the rest of the C runtime initialisation.
+nabu_bare_stub_end:
+ENDIF ; NABU_BARE_ASM
 
 start:
-IF !__NABU_BARE__
+IF !NABU_BARE_ASM
     ; Save stack pointer by modifying code, so it gets restored on exit.
     ld      (__restore_sp_onexit+1),sp
 ENDIF
@@ -108,13 +128,13 @@ ENDIF
     ; Setup BSS memory and perform other initialisation
     call    crt0_init
 
-IF !__NABU_BARE__
+IF !NABU_BARE_ASM
     ; Code is shared with CP/M. This is a noop, but pulls in code
     ; into crt0_init and crt0_exit
     call    cpm_platform_init 
 ENDIF
 
-IF !__NABU_BARE__
+IF !NABU_BARE_ASM
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_init.inc"
 ENDIF
     INCLUDE "crt/classic/crt_init_heap.inc"
@@ -127,35 +147,35 @@ __Exit:
     push    hl ; Save exit code.
     call    crt0_exit
 
-IF !__NABU_BARE__
+IF !NABU_BARE_ASM
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_exit.inc"
 ENDIF
 
     pop     bc
     INCLUDE "crt/classic/crt_exit_eidi.inc"
 
-IF !__NABU_BARE__
+IF !NABU_BARE_ASM
 __restore_sp_onexit:
     ld      sp,0  ; Modified code in here with saved stack pointer.
     ret
-ELSE
+ELSE ; NABU_BARE_ASM
     ; Really should switch ROM bank in and jump to the reset vector, though we
     ; may be running code in the RAM area used by the ROM so that may not work.
 BareEnd:
     halt
     jr BareEnd
-ENDIF
+ENDIF ; !NABU_BARE_ASM
 
 l_dcal:
     jp      (hl)
 
-IF !__NABU_BARE__
-    ; Selects print formats and stdio functions to use.
+IF !NABU_BARE_ASM
+    ; Selects print formats and stdio functions to use.  But not in bare mode!
     INCLUDE "crt/classic/crt_runtime_selection.inc"
 ENDIF
     INCLUDE	"crt/classic/crt_section.inc"
 
-IF !__NABU_BARE__
+IF !NABU_BARE_ASM
     INCLUDE "target/nabu/classic/nabu_hccabuf.asm"
     ; And include handling disabling screenmodes
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_disable.inc"
