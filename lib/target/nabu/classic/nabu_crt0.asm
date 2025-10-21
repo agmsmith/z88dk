@@ -79,6 +79,7 @@ IF NABU_BARE_ASM
 
 nabu_bare_relocate:
     ; Switch out boot ROM so RAM is visible, connect VDP to video output.
+    di
     ld  a, CONTROL_ROMSEL | CONTROL_VDOBUF
     out (IO_CONTROL), a
 
@@ -110,6 +111,10 @@ nabu_bare_stub_get_pc:
 nabu_bare_stub_ldir:
     ldir
     jp  start ; Continue on with the rest of the C runtime initialisation.
+nabu_bare_stub_reset:
+    ld  a, CONTROL_VDOBUF ; Turn off RAM, put back boot ROM, leave video on.
+    out (IO_CONTROL), a
+    jp  0  ; Start at location 0 in the ROM, likely the boot code.
 nabu_bare_stub_end:
 ENDIF ; NABU_BARE_ASM
 
@@ -139,8 +144,10 @@ IF !NABU_BARE_ASM
 ENDIF
     INCLUDE "crt/classic/crt_init_heap.inc"
 
-    ; Turn on or off interrupts as specified by another define.
+IF !NABU_BARE_ASM
+    ; Turn on or off interrupts as specified by __crt_enable_eidi flags.
     INCLUDE "crt/classic/crt_init_eidi.inc"
+ENDIF
 
     call    _main
 __Exit:
@@ -151,19 +158,24 @@ IF !NABU_BARE_ASM
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_exit.inc"
 ENDIF
 
-    pop     bc
-    INCLUDE "crt/classic/crt_exit_eidi.inc"
+    pop     bc ; Exit code.
 
 IF !NABU_BARE_ASM
+    INCLUDE "crt/classic/crt_exit_eidi.inc"
 __restore_sp_onexit:
     ld      sp,0  ; Modified code in here with saved stack pointer.
     ret
 ELSE ; NABU_BARE_ASM
-    ; Really should switch ROM bank in and jump to the reset vector, though we
-    ; may be running code in the RAM area used by the ROM so that may not work.
+    ; Switch the ROM bank in and jump to the location zero reset code.  Since
+    ; this code may be in the RAM area used by the ROM, use a stub in high
+    ; memory.
 BareEnd:
-    halt
-    jr BareEnd
+    di
+    ld  hl, nabu_bare_stub_start
+    ld  de, NABU_BARE_STUB_DESTINATION
+    ld  bc, nabu_bare_stub_end-nabu_bare_stub_start
+    ldir
+    jp  NABU_BARE_STUB_DESTINATION+nabu_bare_stub_reset-nabu_bare_stub_start
 ENDIF ; !NABU_BARE_ASM
 
 l_dcal:
