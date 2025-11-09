@@ -76,11 +76,12 @@ IF NABU_BARE_ASM
     defc    CONTROL_VDOBUF = $02 ; Bit which controls video output choice.
     defc    NABU_BARE_STUB_DESTINATION = $FFE0 ; Should be above temp stack.
     defc    NABU_BARE_TEMP_STACK = $FF00
-    EXTERN  __RODATA_END_tail
+    EXTERN  __BSS_END_tail
 
 nabu_bare_relocate:
     di	; We're not ready to handle interrupts, need an interrupt table etc.
     ld  sp, NABU_BARE_TEMP_STACK ; Temporary stack, away from loaded code.
+
     ; Switch out boot ROM so RAM is visible, connect VDP to video output.
     ld  a, CONTROL_ROMSEL | CONTROL_VDOBUF
     out (IO_CONTROL), a
@@ -101,7 +102,7 @@ nabu_bare_pc: ; HL points to nabu_bare_pc address as loaded in memory.
     ld   bc, nabu_bare_pc-CRT_ORG_CODE
     and  a, a ; Clear the carry flag.
     sbc  hl, bc ; HL set to address of origin of this program, after loading.
-    push hl ; Useful, save for later.
+    push hl ; Useful, save load origin for later.
     ld   bc, nabu_bare_stub_start-CRT_ORG_CODE
     add  hl, bc ; Get address of our stub code.
     ld   de, NABU_BARE_STUB_DESTINATION ; Desired beginning of program in RAM.
@@ -113,7 +114,7 @@ nabu_bare_pc: ; HL points to nabu_bare_pc address as loaded in memory.
     ; the moved code.
     pop  hl ; Address of origin of this program, as loaded in RAM.
     ld   de, CRT_ORG_CODE ; Desired beginning of program in RAM.
-    ld   bc, __RODATA_END_tail-CRT_ORG_CODE ; Size of this program in bytes.
+    ld   bc, __BSS_END_tail-CRT_ORG_CODE ; Size of this program in bytes.
     jp   NABU_BARE_STUB_DESTINATION+nabu_bare_stub_ldir-nabu_bare_stub_start
 
 nabu_bare_stub_start:
@@ -121,9 +122,9 @@ nabu_bare_stub_ldir:
     ldir
     jp  start ; Continue on with the rest of the C runtime initialisation.
 nabu_bare_stub_reset:
-    ld  a, CONTROL_VDOBUF ; Turn off RAM, put back boot ROM, leave video on.
+    ld  a, 0 ; The control register is zero on reset.
     out (IO_CONTROL), a
-    jp  0 ; Start at location 0 in the ROM, likely the boot code.
+    rst  0 ; Start at location 0 in the ROM, likely the boot code.
 nabu_bare_stub_end:
 ENDIF ; NABU_BARE_ASM
 
