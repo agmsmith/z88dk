@@ -143,6 +143,8 @@ IF !NABU_BARE_ASM
     call    cpm_platform_init
 ENDIF
 
+    INCLUDE "crt/classic/crt_init_atexit.inc"
+
 IF !NABU_BARE_ASM
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_init.inc"
 ENDIF
