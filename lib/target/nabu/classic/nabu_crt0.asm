@@ -51,9 +51,6 @@ ENDIF
     EXTERN  vdp_set_mode
 ENDIF ; NABU_BARE_ASM
 
-    ; We don't include atexit() functionality, so don't save space for them.
-    defc    TAR__clib_exit_stack_size = 0
-
     ; Put the stack below $ff00, interrupt table will be at $ff00 and above.
     defc    TAR__register_sp = $ff00
 
