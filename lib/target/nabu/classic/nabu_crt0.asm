@@ -20,12 +20,20 @@
     PUBLIC  __Exit          ;jp'd to by exit()
     PUBLIC  l_dcal          ;jp(hl) - used by compiler to jump indirect.
 
-IFNDEF      CRT_ORG_CODE
-    ; Programs preferably start at location 0 to give you more RAM.  No longer
-    ; have to start after the 4K boot ROM ($140D) since we now turn off the ROM
-    ; and relocate the program to lower memory (won't work for moving higher).
+IFNDEF CRT_ORG_CODE
+    ; No longer have to start where we get loaded into memory by the boot ROM
+    ; (usually $140D, but other ROMs vary) since we now turn off the ROM and
+    ; relocate the program to lower memory (won't work for moving higher).
+    ; However, some programs put stuff (interrupt tables, globals) in the lower
+    ; 4K of memory, like the DSTAR example game, so for non-bare compiles,
+    ; leave first 4K untouched.  You can still define CRT_ORG_CODE if you want
+    ; to start at some other address, even at location zero.
+IF NABU_BARE_ASM
     defc    CRT_ORG_CODE = 0x0000
-ENDIF
+ELSE
+    defc    CRT_ORG_CODE = 0x1000
+ENDIF ; NABU_BARE_ASM
+ENDIF ; CRT_ORG_CODE
 
     ; By default we don't have any rst handlers, since the interrupt table
     ; doesn't start at location 0.
