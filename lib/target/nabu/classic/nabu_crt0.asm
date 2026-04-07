@@ -51,6 +51,13 @@ IF !DEFINED_CONSOLE_ROWS
     defc    CONSOLE_ROWS = 24
 ENDIF
     defc    CRT_KEY_DEL = 127
+
+    ; Subtype "Default" also defines the audio chip ports for some reason.
+    PUBLIC  PSG_AY_REG
+    PUBLIC  PSG_AY_DATA
+    defc    PSG_AY_REG = $40
+    defc    PSG_AY_DATA = $41
+
 IFNDEF CLIB_DEFAULT_SCREEN_MODE
     ; Sets a VDP screen mode.
     defc    CLIB_DEFAULT_SCREEN_MODE = 2
