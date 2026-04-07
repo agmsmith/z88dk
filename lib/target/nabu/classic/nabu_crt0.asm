@@ -20,6 +20,31 @@
     PUBLIC  __Exit          ;jp'd to by exit()
     PUBLIC  l_dcal          ;jp(hl) - used by compiler to jump indirect.
 
+IFNDEF NABU_BARE_ASM
+    ; Subtype "Default" and non-bare others have console output and input.
+    defc    CONSOLE_COLUMNS = 32
+IF !DEFINED_CONSOLE_ROWS
+    defc    CONSOLE_ROWS = 24
+ENDIF
+    defc    CRT_KEY_DEL = 127
+
+    ; Define the audio chip ports for some reason, not used, likely leftover
+    ; copy paste from the lm80c target.
+    PUBLIC  PSG_AY_REG
+    PUBLIC  PSG_AY_DATA
+    defc    PSG_AY_REG = $40
+    defc    PSG_AY_DATA = $41
+
+    EXTERN  cpm_platform_init
+    EXTERN  vdp_set_mode
+
+    defc    TAR__clib_exit_stack_size = 0 ; Disable atexit() functionality.
+    defc    TAR__fputc_cons_generic = 1 ; Has console text output library.
+ENDIF ; NDEF NABU_BARE_ASM
+
+    ; Put the stack below $ff00, interrupt table will be at $ff00 and above.
+    defc    TAR__register_sp = $ff00
+
 IFNDEF CRT_ORG_CODE
     ; No longer have to start where we get loaded into memory by the boot ROM
     ; (usually $140D, but other ROMs vary) since we now turn off the ROM and
@@ -35,39 +60,12 @@ ELSE
 ENDIF ; NABU_BARE_ASM
 ENDIF ; CRT_ORG_CODE
 
-    ; By default we don't have any rst handlers, since the interrupt table
-    ; doesn't start at location 0.
-    defc    TAR__crt_enable_rst = 0
-
-IF NABU_BARE_ASM
-    ; "Bare" subtype, no stdio etc.  Assumes you are using DJ Sures' NABU_LIB
-    ; (see https://nabu.ca/) which is a hardware library included as source
-    ; code that does everything from VDP print support to interrupt handling.
-ELSE
-    ; Subtype "Default" has console output and input.
-    defc    TAR__fputc_cons_generic = 1
-    defc    CONSOLE_COLUMNS = 32
-IF !DEFINED_CONSOLE_ROWS
-    defc    CONSOLE_ROWS = 24
-ENDIF
-    defc    CRT_KEY_DEL = 127
-
-    ; Subtype "Default" also defines the audio chip ports for some reason.
-    PUBLIC  PSG_AY_REG
-    PUBLIC  PSG_AY_DATA
-    defc    PSG_AY_REG = $40
-    defc    PSG_AY_DATA = $41
-
+IFNDEF NABU_BARE_ASM
 IFNDEF CLIB_DEFAULT_SCREEN_MODE
     ; Sets a VDP screen mode.
     defc    CLIB_DEFAULT_SCREEN_MODE = 2
 ENDIF
-    EXTERN  cpm_platform_init
-    EXTERN  vdp_set_mode
-ENDIF ; NABU_BARE_ASM
-
-    ; Put the stack below $ff00, interrupt table will be at $ff00 and above.
-    defc    TAR__register_sp = $ff00
+ENDIF ; NDEF NABU_BARE_ASM
 
     INCLUDE "crt/classic/crt_rules.inc"
 
@@ -142,9 +140,9 @@ nabu_reloc_stub_reset:
 nabu_reloc_stub_end:
 
 start:
-    di ; Best to avoid interrupts while moving the stack pointer around.
     INCLUDE "crt/classic/crt_init_sp.inc" ; Sets the stack pointer.
     ; Set interrupt system mode 2, with interrupt table at $ff00.
+    di
     ld      a,$ff
     ld      i,a
     im      2
@@ -152,24 +150,24 @@ start:
     ; Setup BSS memory and perform other initialisation
     call    crt0_init
 
-IF !NABU_BARE_ASM
+IFNDEF NABU_BARE_ASM
     ; Code is shared with CP/M. This is a noop, but pulls in code
     ; into crt0_init and crt0_exit
     call    cpm_platform_init
-ENDIF
+ENDIF ; NDEF NABU_BARE_ASM
 
     INCLUDE "crt/classic/crt_init_atexit.inc"
 
-IF !NABU_BARE_ASM
+IFNDEF NABU_BARE_ASM
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_init.inc"
-ENDIF
+ENDIF ; NDEF NABU_BARE_ASM
 
     INCLUDE "crt/classic/crt_init_heap.inc"
 
-IF !NABU_BARE_ASM
+IFNDEF NABU_BARE_ASM
     ; Turn on or off interrupts as specified by __crt_enable_eidi flags.
     INCLUDE "crt/classic/crt_init_eidi.inc"
-ENDIF
+ENDIF ; NDEF NABU_BARE_ASM
 
     call    _main
 
@@ -177,15 +175,15 @@ __Exit: ; Re-enters here if user program called exit() rather than returning.
     push    hl ; Save exit code.
     call    crt0_exit
 
-IF !NABU_BARE_ASM
+IFNDEF NABU_BARE_ASM
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_exit.inc"
-ENDIF
+ENDIF ; NDEF NABU_BARE_ASM
 
     pop     bc ; Exit code.
 
-IF !NABU_BARE_ASM
+IFNDEF NABU_BARE_ASM
     INCLUDE "crt/classic/crt_exit_eidi.inc"
-ENDIF ; !NABU_BARE_ASM
+ENDIF ; NDEF NABU_BARE_ASM
 
     ; Switch the ROM bank in and jump to the location zero reset code.  Since
     ; this code may be in the RAM area used by the ROM, use a stub in high
@@ -202,17 +200,16 @@ NabuReboot:
 l_dcal:
     jp      (hl)
 
-IF !NABU_BARE_ASM
+IFNDEF NABU_BARE_ASM
     ; Selects print formats and stdio functions to use.  But not in bare mode!
     INCLUDE "crt/classic/crt_runtime_selection.inc"
-ENDIF
 
-    INCLUDE	"crt/classic/crt_section.inc"
-
-IF !NABU_BARE_ASM
-    ; Include code to access the HCCA network storage device.
-    INCLUDE "target/nabu/classic/nabu_hccabuf.asm"
     ; And include handling disabling screenmodes
     INCLUDE "crt/classic/tms99x8/tms99x8_mode_disable.inc"
-ENDIF
+
+    ; Include code to access the HCCA network storage device.
+    INCLUDE "target/nabu/classic/nabu_hccabuf.asm"
+ENDIF ; NDEF NABU_BARE_ASM
+
+    INCLUDE "crt/classic/crt_section.inc"
 
