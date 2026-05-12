@@ -1,5 +1,5 @@
 #
-# Examples for Spectravideo SVI 
+# Examples for NABU PC
 #
 # $Id: Makefile $
 #
@@ -44,8 +44,9 @@ showlib3d.NABU: ../msx/showlib3d.c
 %.NABU: ../msx/%.c
 	$(CC) $(CFLAGS) -o$*.bin ../msx/$*.c
 
+# DSTAR trashes the first 4K of memory, so move the compile origin.
 dstar.NABU: ../dstar.c
-	$(CC) $(CFLAGS) ../dstar.c -I.. -Dspritesize=16 -DSOUND -create-app -odstar.bin
+	$(CC) $(CFLAGS) ../dstar.c -I.. -Dspritesize=16 -DSOUND -pragma-define:CRT_ORG_CODE=4096 -create-app -odstar.bin
 
 othello.NABU: ../othello.c
 	$(CC) $(CFLAGS) ../othello.c -I.. -clib=ansi -DGRAPHICS -create-app -oothello.bin

@@ -49,15 +49,10 @@ IFNDEF CRT_ORG_CODE
     ; No longer have to start where we get loaded into memory by the boot ROM
     ; (usually $140D, but other ROMs vary) since we now turn off the ROM and
     ; relocate the program to lower memory (won't work for moving higher).
-    ; However, some programs put stuff (interrupt tables, globals) in the lower
-    ; 4K of memory, like the DSTAR example game, so for non-bare compiles,
-    ; leave first 4K untouched.  You can still define CRT_ORG_CODE if you want
-    ; to start at some other address, even at location zero.
-IF NABU_BARE_ASM
+    ; For programs that expect to start higher, add something like this to your
+    ; makefile (use decimal numbers to avoid problems) when invoking zcc:
+    ;   -pragma-define:CRT_ORG_CODE=4096
     defc    CRT_ORG_CODE = 0x0000
-ELSE
-    defc    CRT_ORG_CODE = 0x1000
-ENDIF ; NABU_BARE_ASM
 ENDIF ; CRT_ORG_CODE
 
 IFNDEF NABU_BARE_ASM
